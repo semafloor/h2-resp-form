@@ -43,7 +43,7 @@ const urlencodedParser = bodyParser.urlencoded({extended: false});
 
 // #############################
 // Bypass unrelated hostnames...
-const onlyAllowedPages = function (hostname, res) {
+const onlyAllowedPages = (hostname, res) => {
   if (hostname !== 'secured' && hostname !== 'semafore.motss.koding.io') {
     res.sendStatus(404);
     return;
@@ -53,17 +53,8 @@ const onlyAllowedPages = function (hostname, res) {
 // ##################
 // Express Routing...
 // main URI...
-app.get('/', function (req, res) {
+app.get('/', (req, res) => {
   onlyAllowedPages(req.hostname, res);
-  
-  // let _testLodash = function () {
-  //   return _.random(5, 10);
-  // };
-  // console.log(`testing lodash: ${_testLodash()}`);
-  
-  // TODO: Finish roomify's READ API...
-  // TODO: To find better way to deal with res;
-  // roomifyRead.roomifyRead(req.body, res);
   
   res.send(`<h1>Welcome to HTTP2 Express Server!</h1>`);
   console.log(`
@@ -71,7 +62,7 @@ app.get('/', function (req, res) {
   Someone visted our HTTP2 Express server.`);
 });
 
-app.get('/about', function (req, res) {
+app.get('/about', (req, res) => {
   onlyAllowedPages(req.hostname, res);
   
   res.send('<h2>About page</h2>');
@@ -80,12 +71,12 @@ app.get('/about', function (req, res) {
   Someone visted the About Page.`);
 });
 
-app.get('*', function (req, res) {
+app.get('*', (req, res) => {
   res.sendStatus(404);
 });
 
 // /search/results URI...
-app.post('/search/results', urlencodedParser, function (req, res) {
+app.post('/search/results', urlencodedParser, (req, res) => {
   console.log('\n\n@@@ ############## Start Here ################ ');
   console.log('\nSearching for available empty rooms... Please wait...');
   let _searchDuration = process.hrtime();
@@ -151,7 +142,7 @@ app.post('/search/results', urlencodedParser, function (req, res) {
 // #########################
 // HTTPS server for Express.
 const server = https.createServer(options, app);
-server.listen(port, addr, function () {
+server.listen(port, addr, () => {
   console.log(server.address());
   var host = server.address().address;
   var port = server.address().port;

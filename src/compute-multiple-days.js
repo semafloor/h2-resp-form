@@ -1,4 +1,5 @@
 // const _ = require('lodash');
+// compute-multiple-days.js
 
 function filterMultipleDays (_multipleDays) {
   return _multipleDays.filter((day) => {
@@ -8,7 +9,7 @@ function filterMultipleDays (_multipleDays) {
 }
 
 function prependZero (_string) {
-  return ('00' + _string).slice(-2);
+  return `00${_string}`.slice(-2);
 }
 
 function dateText (_fullyear, _month, _day) {
@@ -30,6 +31,4 @@ function computeDates(_startDate, _endDate) {
   return _dates;
 }
 
-module.exports = function (_startDate, _endDate) {
-  return computeDates(_startDate, _endDate);
-};
+module.exports = (_startDate, _endDate) => computeDates(_startDate, _endDate);

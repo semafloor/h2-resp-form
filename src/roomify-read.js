@@ -1,3 +1,4 @@
+// roomify-read.js
 const _ = require("lodash");
 const Firebase = require('firebase'); 
 
@@ -228,7 +229,7 @@ function logElapseTime (_endLabel) {
 // Say N = 8, total number of execution loop will be (8)(8-1)/2 = 56/2 = 28 #
 
 // TODO: Create more random data to filter out if some days do not have empty room that meets the search criteria;
-exports.roomifyRead = function (_emptyRoomsResult, _emptyRoomSiteMask, _emptyRoomFloorMask) {
+exports.roomifyRead = (_emptyRoomsResult, _emptyRoomSiteMask, _emptyRoomFloorMask) => {
   console.log('\n@@@ ############## Filtering... ################ ');
   let roomifyRead = process.hrtime();
   let _parted = [];

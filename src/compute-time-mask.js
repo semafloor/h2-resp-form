@@ -1,3 +1,4 @@
+// compute-time-mask.js
 /*
   1. To find position of _startTime:
     - convert _startTime: 11:00 => 11 * 60 + 0 * 30 = 660;
@@ -24,7 +25,7 @@ function convertTimeIntoMinutes (_time) {
   return (_hours * 60 + _minutes);
 }
 
-module.exports = function (_startTime='08:00', _endTime='23:30') {
+module.exports = (_startTime='08:00', _endTime='23:30') => {
   // compute _startPos
   let _startTimeInMinutes = convertTimeIntoMinutes(_startTime);
   let _endTimeInMinutes = convertTimeIntoMinutes(_endTime);

@@ -18,12 +18,10 @@ function _getWeekdayName (_fulldate, _weekdayNames) {
   return _weekdayNames[new Date(_fulldate).getDay()];
 }
 
-module.exports = function (_multipleDays) {
-  return _filterMultipleDays(_multipleDays).map((_day) => {
+module.exports = (_multipleDays) => _filterMultipleDays(_multipleDays).map((_day) => {
     return {
       fulldate: _day,
       weekdayName: _getWeekdayName(_day, _weekdayNames),
       weekNumber: _getWeekNumber(_day)
     }
   });
-}

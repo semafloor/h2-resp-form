@@ -1,7 +1,7 @@
 // ###############
 // dependencies...
 const express = require('express');
-const https = require('spdy');
+const https = require('https');
 const morgan = require('morgan');
 const fs = require('fs');
 const compress = require('compression');
@@ -9,6 +9,7 @@ const cors = require('cors');
 const _ = require('lodash');
 const bodyParser = require('body-parser');
 const Firebase = require('firebase');
+const path = require('path');
 
 const computeTimeMask = require('./compute-time-mask');
 const computeMultipleDays = require('./compute-multiple-days');
@@ -22,18 +23,21 @@ const roomifyRead = require('./roomify-read');
 // #######################
 // variables definition...
 const port = process.env.PORT || 8443;
+// const port = 443;
 const addr = '0.0.0.0';
 const app = express();
 const options = {
   key: fs.readFileSync('/home/motss/live/privkey.pem'),
   cert: fs.readFileSync('/home/motss/live/fullchain.pem')
 };
+let fileRoot = path.resolve('.');
 
 // #################
 // Express config...
 app.use(compress());
 app.options('*', cors());
 app.use(morgan('short'));
+app.use(express.static(fileRoot));
 // Express route-specific body-parsing...
 const urlencodedParser = bodyParser.urlencoded({extended: false});
 
@@ -55,24 +59,63 @@ const onlyAllowedPages = (hostname, res) => {
 // main URI...
 app.get('/', (req, res) => {
   onlyAllowedPages(req.hostname, res);
-  
   res.send(`<h1>Welcome to HTTP2 Express Server!</h1>`);
+
   console.log(`
   ${new Date()}
   Someone visted our HTTP2 Express server.`);
 });
 
-app.get('/about', (req, res) => {
-  onlyAllowedPages(req.hostname, res);
-  
-  res.send('<h2>About page</h2>');
-  console.log(`
-  ${new Date()}
-  Someone visted the About Page.`);
-});
+// app.get('/about', (req, res) => {
+//   onlyAllowedPages(req.hostname, res);
 
-app.get('*', (req, res) => {
-  res.sendStatus(404);
+//   res.send('<h2>About page</h2>');
+//   console.log(`
+//   ${new Date()}
+//   Someone visted the About Page.`);
+// });
+
+app.get('/:category/view', (req, res) => {
+  // res.sendStatus(404);
+  let root = fileRoot;
+  console.log(req.params);
+  // console.log(req.path);
+  // console.log(req.route);
+  // let path = req.path;
+  // path = path.split('/')[1];
+  // console.log(req.isSpdy);
+  // switch (path) {
+  //   case 'home':
+  //     console.log('HOME');
+  //     break;
+  //   case 'profile':
+  //     res.push('/var/www/semafloor-test-alpha/dist/bower_components/paper-toolbar/paper-toolbar.html',
+  //       { 'content-type': 'text/html, charset=UTF-8' }, (err, stream) => {
+  //         stream.end('console.log("hello from H2 push stream!");');
+  //       });
+  //     res.push('/var/www/semafloor-test-alpha/dist/bower_components/iron-collapse/iron-collapse.html',
+  //       { 'content-type': 'text/html, charset=UTF-8' }, (err, stream) => {
+  //         stream.end('console.log("hello from H2 push stream - iron-collapse!");');
+  //       });
+  //     console.log('PROFILE');
+  //   break;
+  //   case 'reserve':
+  //     console.log('RESERVE');
+  //   break;
+  //   case 'search':
+  //     console.log('SEARCH');
+  //   break;
+  //   case 'current':
+  //     console.log('CURRENT');
+  //   break;
+  //   case 'room':
+  //     console.log('ROOM');
+  //   break;
+  //   default:
+  //     console.error(`Error happened at ${path}.`);
+  // }
+
+  res.sendFile('index.html', { root });
 });
 
 // /search/results URI...
@@ -108,7 +151,7 @@ app.post('/search/results', urlencodedParser, (req, res) => {
   });
   let _promiseDurationEnd = process.hrtime(_promiseDuration);
   console.log('\n1) Total elapsed time in setting up Promise(s):\t %dms', (_promiseDurationEnd[0] * 1E3 + _promiseDurationEnd[1] * 1E-6).toFixed(3));
-  
+
   Promise.all(_multipleFilteredDaysWithPromise).then((value) => {
     // console.log(_.sortBy(value, 'fulldate'));
     if (_.isEmpty(value)) {
@@ -123,7 +166,7 @@ app.post('/search/results', urlencodedParser, (req, res) => {
       let _emptyRoomsResult = _.sortBy(value, 'fulldate');
       _emptyRoomsResult = roomifyRead.roomifyRead(_emptyRoomsResult, _emptyRoomSiteMask, _emptyRoomFloorMask);
       if (_emptyRoomsResult.totalEmptyRooms === 0) {
-        console.log('Empty room(s) not found!');  
+        console.log('Empty room(s) not found!');
       }else {
         console.log('Empty room(s) found!');
       }
@@ -142,9 +185,14 @@ app.post('/search/results', urlencodedParser, (req, res) => {
 // #########################
 // HTTPS server for Express.
 const server = https.createServer(options, app);
-server.listen(port, addr, () => {
+server.listen(port, addr, (err) => {
+  // if (err) console.log(err);
+  // let uid = parseInt(process.env.SUDO_UID);
+  // if (uid) process.setuid(uid);
+  // console.log('Server\'s UID is now ' + process.getuid());
+
   console.log(server.address());
-  var host = server.address().address;
-  var port = server.address().port;
+  let host = server.address().address;
+  let port = server.address().port;
   console.log(`HTTPS Express server started on https://${host}:${port}.`);
-})
+});

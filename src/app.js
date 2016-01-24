@@ -137,18 +137,30 @@ app.post('/search/results', urlencodedParser, (req, res) => {
   let _emptyRoomCapacityMask = (_reqBody.capacity || 1);
   let _emptyRoomSiteMask = _reqBody.site;
   let _emptyRoomFloorMask = _reqBody.floor;
-  // setting up Promise(s);
+  // // setting up Promise(s);
+  // _multipleFilteredDaysWithPromise = _multipleFilteredDaysWithURL.map((_day) => {
+  //   return new Promise(function (_resolve, _reject) {
+  //     try {
+  //       SEMAFLOORREF.child(_day.refURL + '/site').orderByKey().once('value', function (snapshot) {
+  //         _resolve(roomifyRead.findEmptyRoom(snapshot, _day.refURL, _day.fulldate, _emptyRoomCapacityMask, _emptyRoomTimeMask, _emptyRoomTypesMask));
+  //       });
+  //     } catch (err) {
+  //       err ? _reject (err) : _reject(_day.refURL);
+  //     }
+  //   });
+  // });
+  
+  // Promise version of Firebase - v2.4.0
   _multipleFilteredDaysWithPromise = _multipleFilteredDaysWithURL.map((_day) => {
-    return new Promise(function (_resolve, _reject) {
-      try {
-        SEMAFLOORREF.child(_day.refURL + '/site').orderByKey().once('value', function (snapshot) {
-          _resolve(roomifyRead.findEmptyRoom(snapshot, _day.refURL, _day.fulldate, _emptyRoomCapacityMask, _emptyRoomTimeMask, _emptyRoomTypesMask));
-        });
-      } catch (err) {
-        err ? _reject (err) : _reject(_day.refURL);
-      }
+    return SEMAFLOORREF.child(_day.refURL + '/site').orderByKey().once('value').then((snapshot) => {
+      return roomifyRead.findEmptyRoom(snapshot, _day.refURL, _day.fulldate, _emptyRoomCapacityMask,
+        _emptyRoomTimeMask, _emptyRoomTypesMask);
+    }).catch(function(error) {
+      console.error(_day.refURL, error);
     });
   });
+
+  
   let _promiseDurationEnd = process.hrtime(_promiseDuration);
   console.log('\n1) Total elapsed time in setting up Promise(s):\t %dms', (_promiseDurationEnd[0] * 1E3 + _promiseDurationEnd[1] * 1E-6).toFixed(3));
 

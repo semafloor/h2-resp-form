@@ -3,8 +3,9 @@ const _weekdayNames = ['sunday', 'monday', 'tuesday', 'wednesday', 'thursday', '
 
 function _getWeekNumber (_fulldate) {
   let _now = new Date(_fulldate);
+  _now = new Date(_now.getFullYear(), _now.getMonth(), _now.getDate() - _now.getDay() + 4);
   let _onejan = new Date(_now.getFullYear(), 0, 1);
-  return Math.ceil((((_now - _onejan) / 86400000) + _onejan.getDay()) / 7);
+  return Math.ceil(((_now - _onejan) / 86400000 + 1) / 7);
 }
 
 function _filterMultipleDays (_multipleDays) {
@@ -19,9 +20,9 @@ function _getWeekdayName (_fulldate, _weekdayNames) {
 }
 
 module.exports = (_multipleDays) => _filterMultipleDays(_multipleDays).map((_day) => {
-    return {
-      fulldate: _day,
-      weekdayName: _getWeekdayName(_day, _weekdayNames),
-      weekNumber: _getWeekNumber(_day)
-    }
-  });
+  return {
+    fulldate: _day,
+    weekdayName: _getWeekdayName(_day, _weekdayNames),
+    weekNumber: _getWeekNumber(_day)
+  }
+});

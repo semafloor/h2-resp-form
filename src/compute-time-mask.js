@@ -14,21 +14,21 @@ const _ = require('lodash');
 // convert extractions into time index; 
 // NOTE: endTime first then startTime.
 function convertTimeIntoIdx (_endTimeInMinutes, _startTimeInMinutes=480) {
-  return (_endTimeInMinutes - _startTimeInMinutes) / 30;
+  return Math.floor((_endTimeInMinutes - _startTimeInMinutes) / 30);
 }
 
 // extract hours and minutes from given time;
-function convertTimeIntoMinutes (_time) {
+function convertTimeIntoMinutes (_time, _isEndTime) {
   let _hours = parseInt(_time.slice(0, 2));
   let _minutes = parseInt(_time.slice(-2));
   
-  return (_hours * 60 + _minutes);
+  return _isEndTime ? (_hours * 60 + _minutes - 1) : (_hours * 60 + _minutes);
 }
 
 module.exports = (_startTime='08:00', _endTime='23:30') => {
   // compute _startPos
   let _startTimeInMinutes = convertTimeIntoMinutes(_startTime);
-  let _endTimeInMinutes = convertTimeIntoMinutes(_endTime);
+  let _endTimeInMinutes = convertTimeIntoMinutes(_endTime, true);
   let _startPos = convertTimeIntoIdx(_startTimeInMinutes);
   
   // compute time length starting from _startTime;

@@ -1,7 +1,8 @@
 // ###############
 // dependencies...
 const express = require('express');
-const https = require('https');
+// const https = require('https');
+const https = require('spdy');
 const morgan = require('morgan');
 const fs = require('fs');
 const compress = require('compression');
@@ -75,48 +76,48 @@ app.get('/', (req, res) => {
 //   Someone visted the About Page.`);
 // });
 
-app.get('/:category/view', (req, res) => {
-  // res.sendStatus(404);
-  let root = fileRoot;
-  console.log(req.params);
-  // console.log(req.path);
-  // console.log(req.route);
-  // let path = req.path;
-  // path = path.split('/')[1];
-  // console.log(req.isSpdy);
-  // switch (path) {
-  //   case 'home':
-  //     console.log('HOME');
-  //     break;
-  //   case 'profile':
-  //     res.push('/var/www/semafloor-test-alpha/dist/bower_components/paper-toolbar/paper-toolbar.html',
-  //       { 'content-type': 'text/html, charset=UTF-8' }, (err, stream) => {
-  //         stream.end('console.log("hello from H2 push stream!");');
-  //       });
-  //     res.push('/var/www/semafloor-test-alpha/dist/bower_components/iron-collapse/iron-collapse.html',
-  //       { 'content-type': 'text/html, charset=UTF-8' }, (err, stream) => {
-  //         stream.end('console.log("hello from H2 push stream - iron-collapse!");');
-  //       });
-  //     console.log('PROFILE');
-  //   break;
-  //   case 'reserve':
-  //     console.log('RESERVE');
-  //   break;
-  //   case 'search':
-  //     console.log('SEARCH');
-  //   break;
-  //   case 'current':
-  //     console.log('CURRENT');
-  //   break;
-  //   case 'room':
-  //     console.log('ROOM');
-  //   break;
-  //   default:
-  //     console.error(`Error happened at ${path}.`);
-  // }
+// app.get('/:category/view', (req, res) => {
+//   // res.sendStatus(404);
+//   let root = fileRoot;
+//   console.log(req.params);
+//   // console.log(req.path);
+//   // console.log(req.route);
+//   // let path = req.path;
+//   // path = path.split('/')[1];
+//   // console.log(req.isSpdy);
+//   // switch (path) {
+//   //   case 'home':
+//   //     console.log('HOME');
+//   //     break;
+//   //   case 'profile':
+//   //     res.push('/var/www/semafloor-test-alpha/dist/bower_components/paper-toolbar/paper-toolbar.html',
+//   //       { 'content-type': 'text/html, charset=UTF-8' }, (err, stream) => {
+//   //         stream.end('console.log("hello from H2 push stream!");');
+//   //       });
+//   //     res.push('/var/www/semafloor-test-alpha/dist/bower_components/iron-collapse/iron-collapse.html',
+//   //       { 'content-type': 'text/html, charset=UTF-8' }, (err, stream) => {
+//   //         stream.end('console.log("hello from H2 push stream - iron-collapse!");');
+//   //       });
+//   //     console.log('PROFILE');
+//   //   break;
+//   //   case 'reserve':
+//   //     console.log('RESERVE');
+//   //   break;
+//   //   case 'search':
+//   //     console.log('SEARCH');
+//   //   break;
+//   //   case 'current':
+//   //     console.log('CURRENT');
+//   //   break;
+//   //   case 'room':
+//   //     console.log('ROOM');
+//   //   break;
+//   //   default:
+//   //     console.error(`Error happened at ${path}.`);
+//   // }
 
-  res.sendFile('index.html', { root });
-});
+//   res.sendFile('index.html', { root });
+// });
 
 // /search/results URI...
 app.post('/search/results', urlencodedParser, (req, res) => {

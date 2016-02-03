@@ -80,7 +80,7 @@ function splitPartitionIntoGroups (_parted) {
   let _union = [];
   let _temp = [];
 
-  for (let i = 0; i < _parted.length; i++) {
+  for (let i = 0, ilength = _parted.length; i < ilength; i++) {
     for (let j = 0; j < _parted[i].length; j++) {
       if (_.isArray(_parted[i][j])) {
         _union.push(_parted[i][j]);
@@ -108,22 +108,22 @@ function findIntersection (_parted) {
   }
 
   // when more than 1 partitions, only take the first one as sample...
-  for (let i = 0; i < _parted.length; i++) {
+  for (let i = 0, ilength = _parted.length; i < ilength; i++) {
     _proxies.push(_parted[i][0].available);
   }
   // console.log('##################');
   // console.log(_parted);
   // console.log(_proxies);
 
-  for (let j = 0; j < (_proxies.length - 1); j++) {
+  for (let j = 0, _proxiesLength = _proxies.length; j < (_proxiesLength - 1); j++) {
     // Only care about intersecting sites;
     _siteIntersection = _.intersection(_.keys(_proxies[j]), _.keys(_proxies[j + 1]));
-    // console.log(_siteIntersection);
-    for (let k = 0; k < _siteIntersection.length; k++) {
+    console.log(_siteIntersection);
+    for (let k = 0, _siteIntersectionLength = _siteIntersection.length; k < _siteIntersectionLength; k++) {
       // Only care about intersecting floors;
       _floorIntersection = _.intersection(_.keys(_proxies[j][_siteIntersection[k]]), _.keys(_proxies[j + 1][_siteIntersection[k]]));
       // console.log(_floorIntersection);
-      for (let l = 0; l < _floorIntersection.length; l++) {
+      for (let l = 0, _floorIntersectionLength = _floorIntersection.length; l < _floorIntersectionLength; l++) {
         // When the floor[0] is exactly the same as floor[1];
         if (_.isEqual(_proxies[j][_siteIntersection[k]][_floorIntersection[l]], _proxies[j + 1][_siteIntersection[k]][_floorIntersection[l]])) {
           // console.log(_floorIntersection[l]);
@@ -136,18 +136,21 @@ function findIntersection (_parted) {
           _intersection[_siteIntersection[k]][_floorIntersection[l]] = _proxies[j][_siteIntersection[k]][_floorIntersection[l]];
           // console.log(_intersection);
         }else {
-          // console.log('not-equal');
+          console.log('not-equal');
           // When floor[0] and floor[1] have different structures;
           _unequalRoomsLength = _proxies[j][_siteIntersection[k]][_floorIntersection[l]].length;
+          // console.log(_unequalRoomsLength);
           _unequalRoomsNextLength = _proxies[j + 1][_siteIntersection[k]][_floorIntersection[l]].length;
+          // console.log(_unequalRoomsNextLength);
+          let temp = [];
           for (let m = 0; m < _unequalRoomsLength; m++) {
             // cross checking needed; a[0] -- b[0], a[0] -- b[1], ....
             for (let n = 0; n < _unequalRoomsNextLength; n++) {
               // console.log('cross-checking');
               // Only care about existing rooms;
               if (_.isEqual(_proxies[j][_siteIntersection[k]][_floorIntersection[l]][m], _proxies[j + 1][_siteIntersection[k]][_floorIntersection[l]][n])) {
-                // console.log(_proxies[j][_siteIntersection[k]][_floorIntersection[l]][m]);
-                // console.log(_proxies[j + 1][_siteIntersection[k]][_floorIntersection[l]][n]);
+                // console.log(j, _proxies[j][_siteIntersection[k]][_floorIntersection[l]][m]);
+                // console.log(j + 1, _proxies[j + 1][_siteIntersection[k]][_floorIntersection[l]][n]);
                 // console.log('not-equal-is-equal');
                 // console.log(_proxies[j][_siteIntersection[k]][_floorIntersection[l]][m]);
                 // To create multidimensional object, first dimension must be defined;
@@ -155,10 +158,16 @@ function findIntersection (_parted) {
                 if (_.isUndefined(_intersection[_siteIntersection[k]])) {
                   _intersection[_siteIntersection[k]] = {};
                 }
-                _intersection[_siteIntersection[k]][_floorIntersection[l]] = _proxies[j][_siteIntersection[k]][_floorIntersection[l]][m];
+                // TODO: investigate what's wrong here.
+                // 2016, Feb 3 - Identified only last object value being passed into _intersection[_siteIntersection[k]][_floorIntersection[l]].
+                // workaround is to push all room objects into an array before passing into the location.
+                temp.push(_proxies[j][_siteIntersection[k]][_floorIntersection[l]][m]);
+                // _intersection[_siteIntersection[k]][_floorIntersection[l]] = _proxies[j][_siteIntersection[k]][_floorIntersection[l]][m];
               }
             }
           }
+          _intersection[_siteIntersection[k]][_floorIntersection[l]] = temp;
+          // console.log(_intersection[_siteIntersection[k]][_floorIntersection[l]]);
         }
       }
     }
@@ -244,6 +253,7 @@ exports.roomifyRead = (_emptyRoomsResult, _emptyRoomSiteMask, _emptyRoomFloorMas
   // console.log(_finalIntersectionResult);
   _finalFilteredResultWithRoomCount = _filterResultBasedOnFloorAndSite(_finalIntersectionResult, _emptyRoomSiteMask, _emptyRoomFloorMask);
   _finalFilteredResultWithRoomCount['totalEmptyRooms'] = _countTotalEmptyRooms(_finalFilteredResultWithRoomCount);
+  // console.log(_finalFilteredResultWithRoomCount);
   let roomifyReadEnd = process.hrtime(roomifyRead);
   console.log('\n3) Time elapsed in filtering results with room count:\t %dms', (roomifyReadEnd[0] * 1E3 + roomifyReadEnd[1] * 1E-6).toFixed(3));
   // console.log(finalFilteredResultWithRoomCount);

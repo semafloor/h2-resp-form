@@ -123,76 +123,37 @@ app.get('/', (req, res) => {
 app.post('/search/results', urlencodedParser, (req, res) => {
   console.log('\n\n@@@ ############## Start Here ################ ');
   console.log('\nSearching for available empty rooms... Please wait...');
+  // Timers to measure JS execution.
   let _searchDuration = process.hrtime();
   let _promiseDuration = process.hrtime();
-  // required variables;
+  // Firebase base href.
   const SEMAFLOORREF = new Firebase('https://polymer-semaphore.firebaseio.com/mockMessages');
+  // Cache request body.
   let _reqBody = req.body;
+  // Compute multiple dates array.
   let _multipleDays = computeMultipleDays(_reqBody.startDate, _reqBody.endDate);
+  // Compute multiple dates array with week number.
   let _multipleFilteredDaysWithWeekNumber = computeWeekNumber(_multipleDays);
+  // Compute multiple dates array with URL.
   let _multipleFilteredDaysWithURL = computeDayURL(_multipleFilteredDaysWithWeekNumber);
-  let _multipleFilteredDaysWithPromise = [];
-  // request body => mask;
-  let _emptyRoomTimeMask = computeTimeMask(_reqBody.tStart, _reqBody.tEnd);
-  let _emptyRoomTypesMask = _.isEmpty(_reqBody.types) ? 0 : parseInt(_reqBody.types, 16).toString(10);
-  let _emptyRoomCapacityMask = (_reqBody.capacity || 1);
-  let _emptyRoomSiteMask = _reqBody.site;
-  let _emptyRoomFloorMask = _reqBody.floor;
-  // // setting up Promise(s);
-  // _multipleFilteredDaysWithPromise = _multipleFilteredDaysWithURL.map((_day) => {
-  //   return new Promise(function (_resolve, _reject) {
-  //     try {
-  //       SEMAFLOORREF.child(_day.refURL + '/site').orderByKey().once('value', function (snapshot) {
-  //         _resolve(roomifyRead.findEmptyRoom(snapshot, _day.refURL, _day.fulldate, _emptyRoomCapacityMask, _emptyRoomTimeMask, _emptyRoomTypesMask));
-  //       });
-  //     } catch (err) {
-  //       err ? _reject (err) : _reject(_day.refURL);
-  //     }
-  //   });
-  // });
+  // Initialize multiple dates array with Promises.
+  // let _multipleFilteredDaysWithPromise = [];
   
-  // Promise version of Firebase - v2.4.0
-  _multipleFilteredDaysWithPromise = _multipleFilteredDaysWithURL.map((_day) => {
-    return SEMAFLOORREF.child(_day.refURL + '/site').orderByKey().once('value').then((snapshot) => {
-      return roomifyRead.findEmptyRoom(snapshot, _day.refURL, _day.fulldate, _emptyRoomCapacityMask,
-        _emptyRoomTimeMask, _emptyRoomTypesMask);
-    }).catch(function(error) {
-      console.error(_day.refURL, error);
-    });
-  });
-
+  // Compute request bodies into corresponding masks.
+  // Compute TIME mask.
+  let _maskTimeDec = computeTimeMask(_reqBody.tStart, _reqBody.tEnd);
+  // Compute TYPES mask.
+  let _maskTypesDec = _.isEmpty(_reqBody.types) ? 0 : parseInt(_reqBody.types, 16).toString(10);
+  // Compute Capacity mask.
+  let _maskCapacityDec = (_reqBody.capacity || 1);
+  // Compute SITE mask.
+  let _maskSite = _reqBody.site;
+  // Compute FLOOR mask.
+  let _maskFloor = _reqBody.floor;
   
-  let _promiseDurationEnd = process.hrtime(_promiseDuration);
-  console.log('\n1) Total elapsed time in setting up Promise(s):\t %dms', (_promiseDurationEnd[0] * 1E3 + _promiseDurationEnd[1] * 1E-6).toFixed(3));
-
-  Promise.all(_multipleFilteredDaysWithPromise).then((value) => {
-    // console.log(_.sortBy(value, 'fulldate'));
-    if (_.isEmpty(value)) {
-      let _searchDurationEnd = process.hrtime(_searchDuration);
-      console.log('Search date(s) is(are) either weekends or holiday!');
-      console.log('\n2) Total elapsed time in getting result from Firebase:\t %dms', (_searchDurationEnd[0] * 1E3 + _searchDurationEnd[1] * 1E-6).toFixed(3));
-      res.send(`<h1>Sorry, empty room(s) not found! <br/>Please search again!</h1>`);
-    }else {
-      let _searchDurationEnd = process.hrtime(_searchDuration);
-      console.log('\n2) Total elapsed time in getting result from Firebase:\t %dms', (_searchDurationEnd[0] * 1E3 + _searchDurationEnd[1] * 1E-6).toFixed(3));
-      let _filterDuration = process.hrtime();
-      let _emptyRoomsResult = _.sortBy(value, 'fulldate');
-      _emptyRoomsResult = roomifyRead.roomifyRead(_emptyRoomsResult, _emptyRoomSiteMask, _emptyRoomFloorMask);
-      if (_emptyRoomsResult.totalEmptyRooms === 0) {
-        console.log('Empty room(s) not found!');
-      }else {
-        console.log('Empty room(s) found!');
-      }
-      let _filterDurationEnd = process.hrtime(_filterDuration);
-      console.log('\n4) Total elapsed time of whole process:\t %dms', (_filterDurationEnd[0] * 1E3 + _filterDurationEnd[1] * 1E-6).toFixed(3));
-      return _emptyRoomsResult;
-    }
-  }).then((value) => {
-    res.send(value);
-  }).catch(function (reason) {
-    console.log('Error: ');
-    console.log(reason);
-  });
+  // Passed in all arguments into roomifyRead API.
+  roomifyRead(SEMAFLOORREF, _multipleFilteredDaysWithURL, _maskTimeDec, _maskTypesDec, _maskCapacityDec, _maskSite, _maskFloor, res);
+  
 });
 
 // #########################

@@ -1,261 +1,435 @@
 // roomify-read.js
 const _ = require("lodash");
-const Firebase = require('firebase'); 
+const Firebase = require('firebase');
 
-exports.findEmptyRoom = function (_snapshot, _refURL, _fulldate, _emptyRoomCapacityMask, _emptyRoomTimeMask, _emptyRoomTypesMask) {
-  let _emptyRoomsGroupedBySite = {};
-  let _finalEmptyRooms = {};
-  let _emptyRooms = [];
+// How to search for an empty room that meets the search criteria.
+// Precedence of search criterium:
+// DATE
+// TIME
+// SITE
+// FLOOR
+// CAPACITY
+// TYPES
+// How result will be generated:
+// Date Time Site Floor Capacity Types Done Result
+//    1    1    0     0        0     0    X Returns all empty rooms that meet DATE, TIME.
+//    1    1    0     0        0     1    X Returns all empty rooms that meet DATE, TIME, TYPES.
+//    1    1    0     0        1     0    X Returns all empty rooms that meet DATE, TIME, CAPACITY.
+//    1    1    0     0        1     1    X Returns all empty rooms that meet DATE, TIME, CAPACITY, TYPES.
 
-  function _compareAndMatchCapacity (_roomCapacity, _emptyRoomCapacityMask) {
-    return _roomCapacity >= _emptyRoomCapacityMask;
-  }
+//    1    1    0     1        0     0    - X - Not allowed.
+//    1    1    0     1        0     1    - X - Not allowed.
+//    1    1    0     1        1     0    - X - Not allowed.
+//    1    1    0     1        1     1    - X - Not allowed.
 
-  function _compareAndMatchTime (_roomTime, _emptyRoomTimeMask) {
-    return ((_roomTime & _emptyRoomTimeMask) >>> 0) === 0;
-  }
+//    1    1    1     0        0     0    X Returns all empty rooms at SITE that meet DATE, TIME, SITE.
+//    1    1    1     0        0     1    X Returns all empty rooms at SITE that meet DATE, TIME, SITE, TYPES.
+//    1    1    1     0        1     0    X Returns all empty rooms at SITE that meet DATE, TIME, SITE, CAPACITY.
+//    1    1    1     0        1     1    X Returns all empty rooms at SITE that meet DATE, TIME, SITE, CAPACITY, TYPES.
 
-  function _compareAndMatchTypes (_roomTypes, _emptyRoomTypesMask) {
-    return ((_roomTypes & _emptyRoomTypesMask) >>> 0) === parseInt(_emptyRoomTypesMask);
-  }
+//    1    1    1     1        0     0    X Returns all empty rooms at SITE, FLOOR that meet DATE, TIME.
+//    1    1    1     1        0     1    X Returns all empty rooms at SITE, FLOOR that meet DATE, TIME, TYPES.
+//    1    1    1     1        1     0    X Returns all empty rooms at SITE, FLOOR that meet DATE, TIME, CAPACITY.
+//    1    1    1     1        1     1    X Returns all empty rooms at SITE, FLOOR that meet DATE, TIME, CAPACITY, TYPES.
 
-  _snapshot.forEach((_site) => {
-    _site.forEach((_floor) => {
-      _floor.forEach((_room) => {
-        let _roomTimeInDec = parseInt(_room.val().time, 16).toString(10);
-        let _roomTypesInDec = parseInt(_room.val().types, 16).toString(10);
-        let _isMatchedCapacity = _compareAndMatchCapacity(_room.val().capacity, _emptyRoomCapacityMask);
-        let _isMatchedTime = _compareAndMatchTime(_roomTimeInDec, _emptyRoomTimeMask);
-        let _isMatchedTypes = _compareAndMatchTypes(_roomTypesInDec, _emptyRoomTypesMask);
+// X - TODO: Drop empty result before sending it out as response.
+// X - TODO: Skip interactions, and dropping empty results if result happens to be empty.
 
-        if (_isMatchedCapacity && _isMatchedTime && _isMatchedTypes) {
-          // console.log(_site.key(), _floor.key(), _room.key(), _room.val().time, _room.val().types);
-          _emptyRooms.push({
-            site: _site.key(),
-            floor: _floor.key(),
-            room: _room.key(),
-            time: _room.val().time,
-            types: _room.val().types,
-            capacity: _room.val().capacity
-          });
+
+// Compare the time.
+function _compareTime(_timeHex, _maskDec) {
+  let _timeDec = parseInt(_timeHex, 16).toString(10);
+  return (_timeDec & _maskDec) >>> 0 === 0;
+}
+// Compare the types.
+function _compareTypes(_typesHex, _maskDec) {
+  let _typesDec = parseInt(_typesHex, 16).toString(10);
+  return (_typesDec & _maskDec) >>> 0 === parseInt(_maskDec);
+}
+// Compare the capacity number.
+function _compareCapacity(_capacityDec, _maskDec) {
+  return _capacityDec >= _maskDec;
+}
+
+// Filter all rooms at SITE, FLOOR.
+function _filterRoomByFloor(_snapshot, _maskTimeDec, _maskTypesDec, _maskCapacityDec) {
+  console.log('_filterRoomByFloor snapshot: ', _snapshot);
+  let _filtered = [];
+  _.forEach(_snapshot, (n) => {
+    // For each value of DATE which are all the rooms of a FLOOR.
+    let _roomHasEmptySlot = _.pickBy(n.value, (o) => {
+      // Compare ROOM's TIME.
+      var _isTimeMet = _compareTime(o.time, _maskTimeDec);
+      // Compare ROOM's TYPES.
+      var _isTypesMet = _compareTypes(o.types, _maskTypesDec);
+      // Compare ROOM's CAPACITY.
+      var _isCapacityMet = _compareCapacity(o.capacity, _maskCapacityDec);
+      return _isTimeMet && _isTypesMet && _isCapacityMet;
+    });
+    // Push all the empty ROOMs that meet the TIME criteria.
+    if (!_.isEmpty(_roomHasEmptySlot)) {
+      _filtered.push({ result: _roomHasEmptySlot, ref: n.ref });
+    }
+    // Then proceed to subsequent DATE...
+  });
+  console.log('_filterRoomByFloor: ', _filtered);
+  return _filtered;
+}
+// Filter all rooms at SITE only.
+function _filterRoomBySite(_snapshot, _maskTimeDec, _maskTypesDec, _maskCapacityDec) {
+  console.log('_filterRoomBySite snapshot: ', _snapshot);
+  let _filtered = [];
+  _.forEach(_snapshot, (_site) => {
+    let _filteredSite = {};
+    _.forIn(_site.value, (_floor, _floorName) => {
+      // For each value of DATE which are all the rooms of a FLOOR.
+      let _roomHasEmptySlot = _.pickBy(_floor, (_room) => {
+        // Compare ROOM's TIME.
+        var _isTimeMet = _compareTime(_room.time, _maskTimeDec);
+        // Compare ROOM's TYPES.
+        var _isTypesMet = _compareTypes(_room.types, _maskTypesDec);
+        // Compare ROOM's CAPACITY.
+        var _isCapacityMet = _compareCapacity(_room.capacity, _maskCapacityDec);
+        return _isTimeMet && _isTypesMet && _isCapacityMet;
+      });
+      // Push all the empty ROOMs to its corresponding _floorName that meet the TIME criteria.
+      // if (!_.isEmpty(_roomHasEmptySlot)) {
+        _filteredSite[_floorName] = { result: _roomHasEmptySlot, ref: _site.ref };
+      // }
+      // Then proceed to subsequent DATE...
+    });
+    // if (!_.isEmpty(_filteredSite)) {
+      _filtered.push(_filteredSite);
+    // }
+  });
+  console.log('_filterRoomBySite: ', _filtered);
+  return _filtered;
+}
+// Filter all rooms without SITE, FLOOR.
+function _filterRoom(_snapshot, _maskTimeDec, _maskTypesDec, _maskCapacityDec) {
+  console.log('_filterRoom snapshot: ', _snapshot);
+  let _filtered = [];
+  _.forEach(_snapshot, (_date) => {
+    let _filteredSite = {};
+    _.forIn(_date.value, (_site, _siteName) => {
+      let _filteredFloor = {};
+      _.forIn(_site, (_floor, _floorName) => {
+        let _roomHasEmptySlot = _.pickBy(_floor, (_room) => {
+          let _isTimeMet = _compareTime(_room.time, _maskTimeDec);
+          let _isTypesMet = _compareTypes(_room.types, _maskTypesDec);
+          let _isCapacityMet = _compareCapacity(_room.capacity, _maskCapacityDec);
+
+          return _isTimeMet && _isTypesMet && _isCapacityMet;
+        });
+        // If _roomHasEmptySlot is empty which means that no ROOM has met the search criteria
+        // at this FLOOR.
+        // if (!_.isEmpty(_roomHasEmptySlot)) {
+          _filteredFloor[_floorName] = _roomHasEmptySlot;
+        // }
+      });
+      // If _filteredFloor is empty which means that no ROOM at all FLOORS has met the search
+      // criteria at this SITE.
+      // if (!_.isEmpty(_filteredFloor)) {
+        _filteredSite[_siteName] = _filteredFloor;
+      // }
+    });
+    _filtered.push({ result: _filteredSite, ref: _date.ref });
+  });
+  console.log('_filterRoom: ', _filtered);
+  return _filtered;
+}
+
+// Find out intersection ROOMs at SITE, FLOOR.
+function _intersectionRoomByFloor(_result) {
+  let _compare = [];
+  // Grab and push all the keys of all empty ROOMs from all DATEs.
+  _.forEach(_result, (n) => {
+    _compare.push(_.keys(n.result));
+  });
+  // var _intersected = _.intersection.apply(null, _compare);
+  // Spread an array of array of keys from each DATE.
+  let _intersected = _.intersection(..._compare);
+  let _emptyRoom = {};
+  console.log(_intersected);
+  // Iterate over array of keys over the first object of result since they are the same across DATEs.
+  _.forEach(_intersected, (o) => {
+    _emptyRoom[o] = _result[0].result[o];
+  });
+
+  return _emptyRoom;
+}
+// Find out intersection ROOMs at SITE only.
+function _intersectionRoomBySite(_result) {
+  console.log(_result);
+  // Grab and push all the keys of all empty ROOMs from all DATEs.
+  let _compare = {};
+  _.forEach(_result, (_date) => {
+    if (_.isEmpty(_compare)) {
+      let _keys = _.keys(_date);
+      _.forEach(_keys, (key) => {
+        _compare[key] = [];
+      });
+    }
+    _.forIn(_date, (_floor, _floorName) => {
+      _compare[_floorName].push(_.keys(_floor.result));
+    });
+  });
+  console.log(_compare);
+  // var _intersected = _.intersection.apply(null, _compare);
+  // Spread an array of array of keys from each DATE.
+  let _intersected = {};
+  _.forIn(_compare, (_floor, _floorName) => {
+    _intersected[_floorName] = _.intersection(..._compare[_floorName]);
+  });
+  console.log(_intersected);
+
+  // Final step to find grab all the ROOM info for all intersected ROOMs.
+  let _emptyRoom = {};
+  // Since we've already had the intersections, we can only take the first array.
+  _.forIn(_result[0], (_floor, _floorName) => {
+    // Make an object for each FLOOR.
+    _emptyRoom[_floorName] = {};
+    // Loop thru the intersections which consists of all ROOMs that have empty slots.
+    _.forEach(_intersected[_floorName], (_room) => {
+      // Grab ROOM info from the result value and save it to its corresponding location.
+      _emptyRoom[_floorName][_room] = _floor.result[_room];
+    })
+  });
+
+  return _emptyRoom;
+}
+// Find out intersections without ROOMs without SITE, FLOOR.
+function _intersectionRoom(_result) {
+  console.log('_intersectionRoom result: ', _result);
+  // Grab and push all the keys of all empty ROOMs form all DATEs.
+  let _compare = {};
+  _.forEach(_result, (_date) => {
+    let _dateResult = _date.result;
+    _.forIn(_dateResult, (_site, _siteKey) => {
+      let _sites = _dateResult[_siteKey];
+      if (_.isEmpty(_compare[_siteKey])) {
+        _compare[_siteKey] = {};
+      }
+      _.forIn(_sites, (_floor, _floorKey) => {
+        if (_.isEmpty(_compare[_siteKey][_floorKey])) {
+          _compare[_siteKey][_floorKey] = [];
         }
+        _compare[_siteKey][_floorKey].push(_.keys(_sites[_floorKey]));
+      });
+    });
+  });
+  // Spread an array of array of keys from each DATE.
+  let _intersected = {};
+  _.forIn(_compare, (_site, _siteKey) => {
+    if (_.isEmpty(_intersected[_siteKey])) {
+      _intersected[_siteKey] = {};
+    }
+    _.forIn(_compare[_siteKey], (_floor, _floorKey) => {
+      _intersected[_siteKey][_floorKey] = _.intersection(..._compare[_siteKey][_floorKey]);
+    });
+  });
+  // Final step to find and grab all the ROOM info for all intersected ROOMs.
+  let _emptyRoom = {};
+  let _resultValue = _result[0].result;
+  // Loop thru _intersected's SITE keys.
+  _.forIn(_intersected, (_site, _siteKey) => {
+    // Initialize with an object for each SITE's key if it's empty or undefined.
+    if (_.isEmpty(_emptyRoom[_siteKey])) {
+      _emptyRoom[_siteKey] = {};
+    }
+    // Then loop thru _intersected's FLOOR keys.
+    _.forIn(_intersected[_siteKey], (_floor, _floorKey) => {
+      // Initialize with an object for each FLOOR's key if it's empty or undefined.
+      if (_.isEmpty(_emptyRoom[_siteKey][_floorKey])) {
+        _emptyRoom[_siteKey][_floorKey] = {};
+      }
+      // Loop thru each intersected ROOM keys and grab the information from _resultValue.
+      _.forEach(_intersected[_siteKey][_floorKey], (_room) => {
+        _emptyRoom[_siteKey][_floorKey][_room] = _resultValue[_siteKey][_floorKey][_room];
       });
     });
   });
 
-  _.forIn(_.groupBy(_emptyRooms, 'site'), (value, key) => {
-    _emptyRoomsGroupedBySite[key] = _.groupBy(value, 'floor');
+  // console.log(_compare);
+  // console.log(_intersected);
+  // console.log(_emptyRoom);
+
+  return _emptyRoom;
+}
+
+// Drop empty ROOMs.
+function _dropEmptyByFloor(_emptyRoom) {
+  // If _emptyRoom is empty and still enters here, something must have gone wrong!
+  // Throw an error to inform dev about this!
+  if (_.isEmpty(_emptyRoom)) {
+    console.error(_emptyRoom);
+  }
+
+  // Nothing is needed to be checked, just return _emptyRoom!
+  return _emptyRoom;
+}
+// Drop empty FLOOR only.
+function _dropEmptyBySite(_emptyRoom) {
+  let _emptyRoomClean = {};
+
+  _.forIn(_emptyRoom, (_floor, _floorKey) => {
+    // Save only non-empty FLOORs.
+    if (!_.isEmpty(_floor)) {
+      _emptyRoomClean[_floorKey] = _floor;
+    }
   });
-  _finalEmptyRooms['available'] = _emptyRoomsGroupedBySite;
-  _finalEmptyRooms['totalEmptyRooms'] = _.size(_emptyRooms);
-  _finalEmptyRooms['refURL'] = _refURL;
-  _finalEmptyRooms['fulldate'] = _fulldate;
-  _emptyRooms = []; _emptyRoomsGroupedBySite = {};
-  return _finalEmptyRooms;
+
+  return _emptyRoomClean;
+}
+// Drop empty SITE and FLOOR.
+function _dropEmpty(_emptyRoom) {
+  let _emptyRoomTemp = {};
+  let _emptyRoomClean = {};
+
+  _.forIn(_emptyRoom, (_site, _siteKey) => {
+    _emptyRoomTemp[_siteKey] = {};
+    // Save only non-empty FLOORs.
+    _.forIn(_emptyRoom[_siteKey], (_floor, _floorKey) => {
+      if (!_.isEmpty(_floor)) {
+        _emptyRoomTemp[_siteKey][_floorKey] = _floor;
+      }
+    });
+    // Save only non-empty SITEs.
+    // After omitting empty FLOORs.
+    if (!_.isEmpty(_emptyRoomTemp[_siteKey])) {
+      _emptyRoomClean[_siteKey] = _emptyRoomTemp[_siteKey];
+    }
+  });
+
+  return _emptyRoomClean;
 }
 
-// groupBy callback;
-// result will contain 2 arrays;
-// result[0] contains objects;
-// result[1] can be arrays of objects or objects;
-function partitionEmptyRooms (_part) {
-  let part0 = _.partition(_part, (n,i,a) => !_.isEqual(n.available, a[0].available));
-    if (part0[0].length > 0) {
-      // console.log('cb');
-      let part1 = partitionEmptyRooms(part0[0]);
-      return [part0[1], part1];
+module.exports = (_semafloorRef, _multipleFilteredDaysWithURL, _maskTimeDec, _maskTypesDec, _maskCapacityDec, _maskSite, _maskFloor, res) => {
+  // var a = new Firebase('https://polymer-semaphore.firebaseio.com/mockMessages/2016/01february');
+  // var _dates = [{ fulldate: '2016-02-01', week: 'week05' }, { fulldate: '2016-02-02', week: 'week05' }, { fulldate: '2016-02-03', week: 'week05' }, { fulldate: '2016-02-04', week: 'week05' }, { fulldate: '2016-02-05', week: 'week05' }, { fulldate: '2016-02-08', week: 'week06' }];
+  // Masks.
+  // var _maskTimeDec = parseInt('80000000', 16).toString(10);
+  // var _maskTypesDec = parseInt('803', 16).toString(10);
+  // var _maskCapacityDec = 4;
+  // var _maskFloor = '01level';
+  // var _maskSite = 'alpha';
+  // var _maskFloor;
+  // var _maskSite;
+  // Dates' Promises.
+  var _datesWithPromises = _multipleFilteredDaysWithURL.map(function(_d) {
+    // let _childRef = [_d.weekNumber, _d.fulldate.slice(-2), 'site'].join('/');
+    let _childRef = [_d.refURL, 'site'].join('/');
+    // If SITE, FLOOR presents...
+    _childRef = _.isUndefined(_maskSite) ? _childRef : [_childRef, _maskSite].join('/');
+    _childRef = _.isUndefined(_maskFloor) ? _childRef : [_childRef, _maskFloor].join('/');
+    let _eachRef = _semafloorRef.child(_childRef).once('value').then((snapshot) => {
+      return {
+        value: snapshot.val(),
+        ref: _childRef
+      };
+    });
+    return _eachRef;
+  });
+  
+  // Promise.all
+  Promise.all(_datesWithPromises).then((snapshot) => {
+    let _filteredResult = [];
+    // For each DATE, perform filtering.
+    if (_maskFloor) {
+      _filteredResult = _filterRoomByFloor(snapshot, _maskTimeDec, _maskTypesDec, _maskCapacityDec);
+    }else if (_maskSite){
+      _filteredResult = _filterRoomBySite(snapshot, _maskTimeDec, _maskTypesDec, _maskCapacityDec);
     }else {
-      // console.log('return');
-      return part0[1];
-  }
-}
-
-// single item array will break the code;
-function splitPartitionIntoGroups (_parted) {
-  if (_parted.length < 2 || !_.isArray(_parted[0])) {
-    console.log('partition special route');
-    return [_parted];
-  }
-
-  let _union = [];
-  let _temp = [];
-
-  for (let i = 0, ilength = _parted.length; i < ilength; i++) {
-    for (let j = 0; j < _parted[i].length; j++) {
-      if (_.isArray(_parted[i][j])) {
-        _union.push(_parted[i][j]);
-      }else {
-        _temp.push(_parted[i][j]);
-      }
+      _filteredResult = _filterRoom(snapshot, _maskTimeDec, _maskTypesDec, _maskCapacityDec);
     }
-  }
-  _union.push(_temp);
-  _temp = [];
-  return _union;
-}
-
-function findIntersection (_parted) {
-  let _proxies = [];
-  let _siteIntersection = [];
-  let _floorIntersection = [];
-  let _unequalRoomsLength = 0;
-  let _unequalRoomsNextLength = 0;
-  let _intersection = {};
-
-  // when there is only 1 partition and no comparison...
-  if (_parted.length < 2) {
-    return _parted[0][0].available;
-  }
-
-  // when more than 1 partitions, only take the first one as sample...
-  for (let i = 0, ilength = _parted.length; i < ilength; i++) {
-    _proxies.push(_parted[i][0].available);
-  }
-  // console.log('##################');
-  // console.log(_parted);
-  // console.log(_proxies);
-
-  for (let j = 0, _proxiesLength = _proxies.length; j < (_proxiesLength - 1); j++) {
-    // Only care about intersecting sites;
-    _siteIntersection = _.intersection(_.keys(_proxies[j]), _.keys(_proxies[j + 1]));
-    console.log(_siteIntersection);
-    for (let k = 0, _siteIntersectionLength = _siteIntersection.length; k < _siteIntersectionLength; k++) {
-      // Only care about intersecting floors;
-      _floorIntersection = _.intersection(_.keys(_proxies[j][_siteIntersection[k]]), _.keys(_proxies[j + 1][_siteIntersection[k]]));
-      // console.log(_floorIntersection);
-      for (let l = 0, _floorIntersectionLength = _floorIntersection.length; l < _floorIntersectionLength; l++) {
-        // When the floor[0] is exactly the same as floor[1];
-        if (_.isEqual(_proxies[j][_siteIntersection[k]][_floorIntersection[l]], _proxies[j + 1][_siteIntersection[k]][_floorIntersection[l]])) {
-          // console.log(_floorIntersection[l]);
-          // console.log('is-equal');
-          // To create multidimensional object, first dimension must be defined;
-          // Only define one if it's undefined or first use;
-          if (_.isUndefined(_intersection[_siteIntersection[k]])) {
-            _intersection[_siteIntersection[k]] = {};
-          }
-          _intersection[_siteIntersection[k]][_floorIntersection[l]] = _proxies[j][_siteIntersection[k]][_floorIntersection[l]];
-          // console.log(_intersection);
-        }else {
-          console.log('not-equal');
-          // When floor[0] and floor[1] have different structures;
-          _unequalRoomsLength = _proxies[j][_siteIntersection[k]][_floorIntersection[l]].length;
-          // console.log(_unequalRoomsLength);
-          _unequalRoomsNextLength = _proxies[j + 1][_siteIntersection[k]][_floorIntersection[l]].length;
-          // console.log(_unequalRoomsNextLength);
-          let temp = [];
-          for (let m = 0; m < _unequalRoomsLength; m++) {
-            // cross checking needed; a[0] -- b[0], a[0] -- b[1], ....
-            for (let n = 0; n < _unequalRoomsNextLength; n++) {
-              // console.log('cross-checking');
-              // Only care about existing rooms;
-              if (_.isEqual(_proxies[j][_siteIntersection[k]][_floorIntersection[l]][m], _proxies[j + 1][_siteIntersection[k]][_floorIntersection[l]][n])) {
-                // console.log(j, _proxies[j][_siteIntersection[k]][_floorIntersection[l]][m]);
-                // console.log(j + 1, _proxies[j + 1][_siteIntersection[k]][_floorIntersection[l]][n]);
-                // console.log('not-equal-is-equal');
-                // console.log(_proxies[j][_siteIntersection[k]][_floorIntersection[l]][m]);
-                // To create multidimensional object, first dimension must be defined;
-                // Only define one if it's undefined or first use;
-                if (_.isUndefined(_intersection[_siteIntersection[k]])) {
-                  _intersection[_siteIntersection[k]] = {};
-                }
-                // TODO: investigate what's wrong here.
-                // 2016, Feb 3 - Identified only last object value being passed into _intersection[_siteIntersection[k]][_floorIntersection[l]].
-                // workaround is to push all room objects into an array before passing into the location.
-                temp.push(_proxies[j][_siteIntersection[k]][_floorIntersection[l]][m]);
-                // _intersection[_siteIntersection[k]][_floorIntersection[l]] = _proxies[j][_siteIntersection[k]][_floorIntersection[l]][m];
-              }
-            }
-          }
-          _intersection[_siteIntersection[k]][_floorIntersection[l]] = temp;
-          // console.log(_intersection[_siteIntersection[k]][_floorIntersection[l]]);
-        }
-      }
+  
+    return _filteredResult;
+  }).then((result) => {
+    console.log('Filtered result: ', result);
+    let _emptyRoom = {};
+  
+    // If result is empty, skip finding intersections.
+    if (_.isEmpty(result)) {
+      return _emptyRoom;
     }
-    // console.log('proxies');
-    // console.log(j, _proxies.length);
-    // console.log(_proxies[j]);
-    // console.log(_intersection);
-    // If it's last 2 don't replace _proxies value and it's ready to be output;
-    if (j < (_proxies.length - 2)) {
-      _proxies[j] = _intersection;
-      _intersection = {}; // clear _intersection after successful consecutive intersection;
-    }
-    // console.log(_proxies[j]);
-  }
-  return _intersection;
-}
-
-// deep count number of rooms of final filtered result;
-let _countTotalEmptyRooms = (_filteredResult) => {
-  let _total = 0;
-  return _.reduce(_filteredResult, (total, n) => {
-    return _.reduce(n, (total, n) => {
-      _total = _total + _.size(n);
-      return _total;
-    }, 0);
-  }, 0);
-};
-
-
-// if floor and/ or site is specified;
-// RAW data: startDate=2015-12-22&endDate=2015-12-22&tStart=22%3A29&tEnd=22%3A29&capacity=1&site=&floor=&types=0
-function _filterResultBasedOnFloorAndSite (_finalEmptyRooms, _site, _floor) {
-  if (!_.isEmpty(_site) && _.isString(_site)) {
-    let _filteredSite = {};
-    if (_.keys(_finalEmptyRooms).indexOf(_site) >= 0) {
-      _filteredSite = _.pick(_finalEmptyRooms, _site);
+  
+    // For each DATE, find out intersection ROOMs.
+    console.log('non-empty-proceed');
+    if (_maskFloor) {
+      _emptyRoom = _intersectionRoomByFloor(result);
+    }else if (_maskSite){
+      _emptyRoom = _intersectionRoomBySite(result);
     }else {
-      return {};
+      _emptyRoom = _intersectionRoom(result);
     }
-
-    if (!_.isEmpty(_floor) && _.isString(_floor)) {
-      if (_.keys(_filteredSite[_site]).indexOf(_floor) >= 0) {
-        _filteredSite[_site] = _.pick(_filteredSite[_site], _floor);
-        return _filteredSite;
-      }
+  
+    return _emptyRoom;
+  }).then((emptyRoom) => {
+    // Further processing.
+    console.log('emptyRoom: ', emptyRoom);
+    let _emptyRoomClean = {};
+  
+    // If emptyRoom is empty, skip removing empty slots.
+    if (_.isEmpty(emptyRoom)) {
+      return _emptyRoomClean;
     }
-
-    return _filteredSite;
-  }
-
-  return _finalEmptyRooms;
+  
+    // Drop empty slots inside the emptyRoom.
+    if (_maskFloor) {
+      _emptyRoomClean = _dropEmptyByFloor(emptyRoom);
+    }else if (_maskSite) {
+      _emptyRoomClean = _dropEmptyBySite(emptyRoom);
+    }else {
+      _emptyRoomClean = _dropEmpty(emptyRoom);
+    }
+  
+    return _emptyRoomClean;
+  }).then((emptyRoomClean) => {
+    // TODO: Make response that client can read.
+    // let _finalResult = {};
+    // _finalResult[_maskSite] = {};
+    console.log('emptyRoomClean: ', emptyRoomClean);
+  
+    // if (_maskFloor) {
+    //   _finalResult[_maskFloor] = emptyRoomClean;
+    // }else if (_maskSite) {
+    //   _finalResult = emptyRoomClean;
+    // }else {
+    //   _finalResult = emptyRoomClean;
+    // }
+    // console.log(_finalResult);
+    // Send out as response with res object.
+    // res.send(_finalResult);
+  }).catch((error) => {
+    console.error(error);
+  });
 };
 
-// To be able to log elapsed time on both Node and browser;
-function logElapseTime (_endLabel) {
-  try {
-    if (_endLabel) {
-      return process.hrtime(_endLabel);
-    }
-    return process.hrtime();
-  }catch (e) {
-    return window.performance.now();
-  }
-};
 
 // For signal tower approach,
-//(N-1)+(N-2)+(N-3)+(N-4)+(N-5)+(N-6)+(N-7) => N(N-n)/2, N = 8, n >= 1
+// (N-1)+(N-2)+(N-3)+(N-4)+(N-5)+(N-6)+(N-7) => N(N-n)/2, N = 8, n >= 1
 // Say N = 8, total number of execution loop will be (8)(8-1)/2 = 56/2 = 28 #
 
 // TODO: Create more random data to filter out if some days do not have empty room that meets the search criteria;
-exports.roomifyRead = (_emptyRoomsResult, _emptyRoomSiteMask, _emptyRoomFloorMask) => {
-  console.log('\n@@@ ############## Filtering... ################ ');
-  let roomifyRead = process.hrtime();
-  let _parted = [];
-  let _finalIntersectionResult = [];
-  let _finalFilteredResultWithRoomCount = {};
+// exports.roomifyRead = (_emptyRoomsResult, _emptyRoomSiteMask, _emptyRoomFloorMask) => {
+//   console.log('\n@@@ ############## Filtering... ################ ');
+//   let roomifyRead = process.hrtime();
+//   let _parted = [];
+//   let _finalIntersectionResult = [];
+//   let _finalFilteredResultWithRoomCount = {};
   
-  _emptyRoomsResult = _.sortBy(_emptyRoomsResult, 'fulldate');
-  // console.log(_emptyRoomsResult);
-  _parted = splitPartitionIntoGroups(partitionEmptyRooms(_emptyRoomsResult));
-  // console.log(_parted);
-  _finalIntersectionResult = findIntersection(_parted);
-  // console.log(_finalIntersectionResult);
-  _finalFilteredResultWithRoomCount = _filterResultBasedOnFloorAndSite(_finalIntersectionResult, _emptyRoomSiteMask, _emptyRoomFloorMask);
-  _finalFilteredResultWithRoomCount['totalEmptyRooms'] = _countTotalEmptyRooms(_finalFilteredResultWithRoomCount);
-  // console.log(_finalFilteredResultWithRoomCount);
-  let roomifyReadEnd = process.hrtime(roomifyRead);
-  console.log('\n3) Time elapsed in filtering results with room count:\t %dms', (roomifyReadEnd[0] * 1E3 + roomifyReadEnd[1] * 1E-6).toFixed(3));
-  // console.log(finalFilteredResultWithRoomCount);
-  return _finalFilteredResultWithRoomCount;
-};
+//   _emptyRoomsResult = _.sortBy(_emptyRoomsResult, 'fulldate');
+//   // console.log(_emptyRoomsResult);
+//   _parted = splitPartitionIntoGroups(partitionEmptyRooms(_emptyRoomsResult));
+//   // console.log(_parted);
+//   _finalIntersectionResult = findIntersection(_parted);
+//   // console.log(_finalIntersectionResult);
+//   _finalFilteredResultWithRoomCount = _filterResultBasedOnFloorAndSite(_finalIntersectionResult, _emptyRoomSiteMask, _emptyRoomFloorMask);
+//   _finalFilteredResultWithRoomCount['totalEmptyRooms'] = _countTotalEmptyRooms(_finalFilteredResultWithRoomCount);
+//   // console.log(_finalFilteredResultWithRoomCount);
+//   let roomifyReadEnd = process.hrtime(roomifyRead);
+//   console.log('\n3) Time elapsed in filtering results with room count:\t %dms', (roomifyReadEnd[0] * 1E3 + roomifyReadEnd[1] * 1E-6).toFixed(3));
+//   // console.log(finalFilteredResultWithRoomCount);
+//   return _finalFilteredResultWithRoomCount;
+//   return _parted;
+// };

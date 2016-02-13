@@ -304,6 +304,66 @@ function _dropEmpty(_emptyRoom) {
   return _emptyRoomClean;
 }
 
+// Make all ROOMs at given SITE, FLOOR into arrays instead of objects.
+// Additional feature to include SITE, FLOOR.
+function _arrayliseRoomByFloor(_emptyRoomClean, _maskFloor, _maskSite) {
+  let _arraylise = {}
+  let _tempRoomArray = [];
+
+  _arraylise[_maskSite] = {};
+
+  _.forIn(_emptyRoomClean, (_roomInfo, _roomName) => {
+    let _tempRoomInfo = _roomInfo;
+    _tempRoomInfo['room'] = _roomName;
+    _tempRoomArray.push(_tempRoomInfo);
+  });
+  _arraylise[_maskSite][_maskFloor] = _tempRoomArray;
+
+  return _arraylise;
+}
+// Make all ROOMs at given SITE only into arrays instead of objects.
+// Additional feature to include SITE.
+function _arrayliseRoomBySite(_emptyRoomClean, _maskSite) {
+  let _arraylise = {};
+
+  _arraylise[_maskSite] = {};
+
+  _.forIn(_emptyRoomClean, (_floor, _floorKey) => {
+    let _tempRoomArray = [];
+    _.forIn(_emptyRoomClean[_floorKey], (_roomInfo, _roomName) => {
+      let _tempRoomInfo = _roomInfo;
+      _tempRoomInfo['room'] = _roomName;
+      _tempRoomArray.push(_tempRoomInfo);
+    });
+    _arraylise[_maskSite][_floorKey] = _tempRoomArray;
+  });
+
+  return _arraylise;
+}
+// Make all ROOMS at no given SITE, FLOOR into arrays instead of objects.
+// Additional feature to include SITE, FLOOR.
+function _arrayliseRoom(_emptyRoomClean) {
+  let _arraylise = {};
+
+  _.forIn(_emptyRoomClean, (_site, _siteKey) => {
+    if (_.isEmpty(_arraylise[_siteKey])) {
+      _arraylise[_siteKey] = {};
+    }
+    _.forIn(_emptyRoomClean[_siteKey], (_floor, _floorKey) => {
+      let _tempRoomArray = [];
+      _.forIn(_emptyRoomClean[_siteKey][_floorKey], (_roomInfo, _roomName) => {
+        let _tempRoomInfo = _roomInfo;
+        _tempRoomInfo['room'] = _roomName;
+        _tempRoomArray.push(_tempRoomInfo);
+      });
+      _arraylise[_siteKey][_floorKey] = _tempRoomArray;
+    });
+  });
+
+  return _arraylise;
+}
+
+
 module.exports = (_semafloorRef, _multipleFilteredDaysWithURL, _maskTimeDec, _maskTypesDec, _maskCapacityDec, _maskSite, _maskFloor, res) => {
   // var a = new Firebase('https://polymer-semaphore.firebaseio.com/mockMessages/2016/01february');
   // var _dates = [{ fulldate: '2016-02-01', week: 'week05' }, { fulldate: '2016-02-02', week: 'week05' }, { fulldate: '2016-02-03', week: 'week05' }, { fulldate: '2016-02-04', week: 'week05' }, { fulldate: '2016-02-05', week: 'week05' }, { fulldate: '2016-02-08', week: 'week06' }];
@@ -386,20 +446,21 @@ module.exports = (_semafloorRef, _multipleFilteredDaysWithURL, _maskTimeDec, _ma
     return _emptyRoomClean;
   }).then((emptyRoomClean) => {
     // TODO: Make response that client can read.
-    // let _finalResult = {};
-    // _finalResult[_maskSite] = {};
     console.log('emptyRoomClean: ', emptyRoomClean);
+    let _arraylise = {};
   
-    // if (_maskFloor) {
-    //   _finalResult[_maskFloor] = emptyRoomClean;
-    // }else if (_maskSite) {
-    //   _finalResult = emptyRoomClean;
-    // }else {
-    //   _finalResult = emptyRoomClean;
-    // }
-    // console.log(_finalResult);
+    if (_maskFloor) {
+      _arraylise = _arrayliseRoomByFloor(emptyRoomClean, _maskFloor, _maskSite);
+    }else if (_maskSite) {
+      _arraylise = _arrayliseRoomBySite(emptyRoomClean, _maskSite);
+    }else {
+      _arraylise = _arrayliseRoom(emptyRoomClean);
+    }
+  
+    console.log(_arraylise);
+    
     // Send out as response with res object.
-    // res.send(_finalResult);
+    res.send(_arraylise);
   }).catch((error) => {
     console.error(error);
   });

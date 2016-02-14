@@ -5,6 +5,7 @@ const concat = require('gulp-concat');
 const del = require('del');
 const jshint = require('gulp-jshint');
 const stylish = require('jshint-stylish');
+const runSequence = require('run-sequence');
 
 let transpiler = 'Babel';
 const SRC = 'src/*.js';
@@ -23,14 +24,14 @@ gulp.task('default', () => {
 
 gulp.task('clean', () => del(DIST  + '/*'));
 
-gulp.task('lint', () => {
-  return gulp.src(SRC)
-    .pipe(jshint())
-    .pipe(jshint.reporter(stylish))
-    .pipe(jshint.reporter('fail'))
-});
+// gulp.task('lint', () => {
+//   return gulp.src(SRC)
+//     .pipe(jshint())
+//     .pipe(jshint.reporter(stylish))
+//     .pipe(jshint.reporter('fail'))
+// });
 
-gulp.task('babel', ['clean'], () => {
+gulp.task('babel', () => {
   return gulp.src(SRC)
     .pipe(babel())
     .on('error', onError)
@@ -38,6 +39,19 @@ gulp.task('babel', ['clean'], () => {
     .pipe(gulp.dest(DIST));
 });
 
+gulp.task('robots', () => {
+  return gulp.src([ 'src/*.txt' ])
+    .pipe(gulp.dest(DIST));
+});
+
 gulp.task('monit', () => {
-  gulp.watch(SRC, ['babel']);
+  gulp.watch([ SRC, 'src/*.txt' ], (event) => {
+    console.log(`File ${event.path} was ${event.type}, running tasks...`);
+    runSequence(
+      'default',
+      'clean',
+      'robots',
+      'babel'
+    );
+  });
 });

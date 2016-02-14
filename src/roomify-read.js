@@ -460,6 +460,7 @@ module.exports = (_semafloorRef, _multipleFilteredDaysWithURL, _maskTimeDec, _ma
     console.log(_arraylise);
     
     // Send out as response with res object.
+    console.log('_arraylise');
     res.send(_arraylise);
   }).catch((error) => {
     console.error(error);

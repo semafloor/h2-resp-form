@@ -38,7 +38,7 @@ let fileRoot = path.resolve('.');
 app.use(compress());
 app.options('*', cors());
 app.use(morgan('short'));
-app.use(express.static(fileRoot));
+// app.use(express.static(fileRoot));
 // Express route-specific body-parsing...
 const urlencodedParser = bodyParser.urlencoded({extended: false});
 
@@ -48,23 +48,27 @@ const urlencodedParser = bodyParser.urlencoded({extended: false});
 
 // #############################
 // Bypass unrelated hostnames...
-const onlyAllowedPages = (hostname, res) => {
-  if (hostname !== 'secured' && hostname !== 'semafore.motss.koding.io') {
-    res.sendStatus(404);
-    return;
-  }
-};
+const onlyAllowedPages = (hostname) => hostname !== 'secured' && hostname !== 'semafore.motss.koding.io';
 
 // ##################
 // Express Routing...
 // main URI...
 app.get('/', (req, res) => {
-  onlyAllowedPages(req.hostname, res);
-  res.send(`<h1>Welcome to HTTP2 Express Server!</h1>`);
-
-  console.log(`
-  ${new Date()}
-  Someone visted our HTTP2 Express server.`);
+  let _isAllowHostname = onlyAllowedPages(req.hostname);
+  
+  if (_isAllowHostname) {
+    console.log('app.get');
+    console.log(req);
+    res.send(`<h1>Welcome to HTTP2 Express Server!</h1>`);
+  
+    console.log(`
+    ${new Date()}
+    Someone visted our HTTP2 Express server.`);  
+  }else {
+    console.log('404');
+    console.log(req);
+    res.sendStatus(404);
+  }
 });
 
 // app.get('/about', (req, res) => {
@@ -124,8 +128,8 @@ app.post('/search/results', urlencodedParser, (req, res) => {
   console.log('\n\n@@@ ############## Start Here ################ ');
   console.log('\nSearching for available empty rooms... Please wait...');
   // Timers to measure JS execution.
-  let _searchDuration = process.hrtime();
-  let _promiseDuration = process.hrtime();
+  // let _searchDuration = process.hrtime();
+  // let _promiseDuration = process.hrtime();
   // Firebase base href.
   const SEMAFLOORREF = new Firebase('https://polymer-semaphore.firebaseio.com/mockMessages');
   // Cache request body.

@@ -336,13 +336,20 @@ var _forIn = _.forIn;
 var _isEmpty = _.isEmpty;
 var _values = _.values;
 
+// [CRON_JOB] This will only run every minute in between 8am - 11pm.
+// and client side only allows reservations up to 11:30pm.
+// So, by right, cron job will not trigger push notification after 11.30pm.
 var _pushUpcoming = new cronJob({
-  cronTime: '0 0-59/1 0-23/1 * * 1-5',
+  cronTime: '0 0-59/1 8-23/1 * * 1-5',
   onTick: _ => {
-    var _nowTime = momentTimezone(new Date()).tz('Asia/Singapore');
+    let _nowTime = momentTimezone(new Date()).tz('Asia/Singapore');
+    if (_nowTime.format('HH:mm') > '23:30') {
+      console.log(`\nDo nothing at ${_nowTime.format('HH:mm')}!`);
+      return;
+    }
     console.log(`\ncronJob running at ${_nowTime.format('ddd, YYYY-MM-DD hh:mm:ss:SSSSA Z')}`);
 
-    // For every 15 seconds, traverse all users' Firebase
+    // For every minute, traverse all users' Firebase
     // Filter those users who have subscriptions for push notification.
     _firebaseUsersRef.once('value').then((_snapshot) => {
       let _allUsers = [];
@@ -363,30 +370,32 @@ var _pushUpcoming = new cronJob({
       return _allUsers;
     }).then((_allUsers) => {
       let _allUsersLen = _allUsers.length;
-      // let _randomTitleIdx = Math.floor(Math.random() * _randomTitlesLen);
-      // let _randomBodyIdx = Math.floor(Math.random() * _randomBodiesLen);
       let _registrationTokens = [];
       // Working on filtered users to start traversing their reservations
       // to lookup for any reservations that will due in 15 mins.
       for (let i = 0; i < _allUsersLen; i++) {
-        // console.log(_allUsers[i]);
         let _email = _allUsers[i].email;
         let _uid = _allUsers[i].uid;
         let _sid = _values(_allUsers[i].sid);
         let _sidLen = _sid.length;
         let _reservations = _allUsers[i].reservations;
-        let _nowFifteen = _nowTime.format('HH:mm');
-        let _nextFifteen = _nowTime.add(15, 'm').format('HH:mm');
+        let _nowFifteen = _nowTime.format('mm');
+
         // Traverse every reservations of _allUsers[i].
         _forIn(_reservations, (r, idx) => {
           // When fromTime is in between now and the next 15 mins...
           // By default, each reservations has min 30mins, starts from 00.
-console.log(i, idx, r.fromTime, _nowFifteen, _nextFifteen, r.fromTime >= _nowFifteen && r.fromTime <= _nextFifteen);
-          if (r.fromTime >= _nowFifteen && r.fromTime <= _nextFifteen) {
-            let _fromTimeMin = parseFloat(r.fromTime.slice(-2));
-            let _nowFifteenMin = parseFloat(_nowFifteen.slice(-2));
-            let _timeLeft = Math.abs(_fromTimeMin - _nowFifteenMin);
-            _timeLeft = _timeLeft >= 15 ? 15 : 0;
+          let _fromTimeMin = parseFloat(r.fromTime.slice(-2));
+          let _nowFifteenMin = parseFloat(_nowFifteen);
+          let _timeLeft = _fromTimeMin - _nowFifteenMin;
+          // _fromTimeMin - _nowFifteenMin and if less than 0 offset it from 60.
+          _timeLeft = _timeLeft < 0 ? 60 - _timeLeft : _timeLeft;
+          // At this moment, only push notify at 15, 10, 5, 0 min(s).
+          let _isProperTimeLeft = _timeLeft === 15 || _timeLeft === 10 ||
+                                  _timeLeft === 5 || _timeLeft === 0;
+          console.log('_timeLeft:', _timeLeft);
+          // If fromTime is in between and has predefined time left...
+          if (_isProperTimeLeft) {
             // Push to queue which will be going to be used by incoming
             // request from subscribed device/ browser for validation.
             _pushQueue[_email] = {
@@ -397,7 +406,7 @@ console.log(i, idx, r.fromTime, _nowFifteen, _nextFifteen, r.fromTime >= _nowFif
             };
 
             // Push every subscription id.
-            console.log(_sidLen);
+            console.log('sidLen:', _sidLen);
             for (let i = 0; i < _sidLen; i++) {
               console.log(`_sid: ${_sid[i]}`);
               _registrationTokens.push(_sid[i]);
@@ -441,7 +450,41 @@ console.log(i, idx, r.fromTime, _nowFifteen, _nextFifteen, r.fromTime >= _nowFif
   start: !1,
   timeZone: 'Asia/Singapore'
 });
+
+// [CRON_JOB] Move all old reservations after today into history.
+var _moveOldReservationsIntoHistory = new cronJob({
+  cronTime: '0 0 0 * * 2-6',
+  onTick: _ => {
+    let _nowTime = momentTimezone(new Date()).tz('Asia/Singapore');
+    console.log(`_moveOldReservationsIntoHistory running at ${_nowTime.format('ddd, YYYY-MM-DD hh:mm:ss:SSSS Z')}`);
+  },
+  onComplete: _ => {
+    let _nowTime = momentTimezone(new Date()).tz('Asia/Singapore');
+    console.log(`_moveOldReservationsIntoHistory stops at ${_nowTime.format('ddd, YYYY-MM-DD hh:mm:ss:SSSS Z')}`);
+  },
+  start: !1,
+  timeZone: 'Asia/Singapore'
+});
+
+// [CRON_JOB] To ensure that cron job is running every minute.
+var _runEveryMinute = new cronJob({
+  cronTime: '0 0-59/1 0-23/1 * * *',
+  onTick: _ => {
+    let _nowTime = momentTimezone(new Date()).tz('Asia/Singapore');
+    console.log(`
+Running every minute at ${_nowTime.format('ddd, YYYY-MM-DD hh:mm:ss:SSSS Z')}.
+    `);
+  },
+  onComplete: _ => {},
+  start: !1,
+  timeZone: 'Asia/Singapore'
+});
+
+// Start cron jobs.
 _pushUpcoming.start();
+_moveOldReservationsIntoHistory.start();
+_runEveryMinute.start();
+
 
 // #########################
 // HTTPS server for Express.

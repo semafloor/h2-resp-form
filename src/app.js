@@ -206,8 +206,12 @@ app.get('/notification-data.json/:email', (req, res) => {
   console.log('\nsending push notification...');
   console.log(_randomTitles[_randomTitleIdx], _randomBodies[_randomBodyIdx], _randomTag);
   console.log(req.headers, req.params.email);
+  console.log('_pushQueue:', _emailParams, _pushQueue[_emailParams]);
 
   // Check for existing email in the push queue.
+  // Since the push queue is an Object, new reminder will automatically overwrites
+  // the existing one which under the same user. Only one reminder will be push-notified
+  // at a time.
   if (_.isUndefined(_pushQueue[_emailParams])) {
     // TODO: For debugging purpose. To be removed.
     res.json({
@@ -366,9 +370,9 @@ var _pushUpcoming = new cronJob({
       // to lookup for any reservations that will due in 15 mins.
       for (let i = 0; i < _allUsersLen; i++) {
         // console.log(_allUsers[i]);
-        let _email = encodeURIComponent(_allUsers[i].email);
+        let _email = _allUsers[i].email;
         let _uid = _allUsers[i].uid;
-        let _sid = _values(_allUsers[i].pushSubscription);
+        let _sid = _values(_allUsers[i].sid);
         let _sidLen = _sid.length;
         let _reservations = _allUsers[i].reservations;
         let _nowFifteen = _nowTime.format('HH:mm');
@@ -393,8 +397,9 @@ console.log(i, idx, r.fromTime, _nowFifteen, _nextFifteen, r.fromTime >= _nowFif
             };
 
             // Push every subscription id.
+            console.log(_sidLen);
             for (let i = 0; i < _sidLen; i++) {
-              // TODO: _registrationTokens is still empty even though it's true.
+              console.log(`_sid: ${_sid[i]}`);
               _registrationTokens.push(_sid[i]);
             }
           }

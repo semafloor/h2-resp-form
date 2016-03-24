@@ -204,9 +204,9 @@ app.get('/notification-data.json/:email', (req, res) => {
   let _emailParams = req.params.email;
 
   console.log('\nsending push notification...');
-  console.log(_randomTitles[_randomTitleIdx], _randomBodies[_randomBodyIdx], _randomTag);
-  console.log(req.headers, req.params.email);
-  console.log('_pushQueue:', _emailParams, _pushQueue[_emailParams]);
+  // console.log(req.headers);
+  console.log(req.params.email);
+  // console.log('_pushQueue:', _emailParams, _pushQueue[_emailParams]);
 
   // Check for existing email in the push queue.
   // Since the push queue is an Object, new reminder will automatically overwrites
@@ -214,6 +214,7 @@ app.get('/notification-data.json/:email', (req, res) => {
   // at a time.
   if (_.isUndefined(_pushQueue[_emailParams])) {
     // TODO: For debugging purpose. To be removed.
+    console.log(_randomTitles[_randomTitleIdx], _randomBodies[_randomBodyIdx], _randomTag);
     res.json({
       'title': _randomTitles[_randomTitleIdx],
       'message': _randomBodies[_randomBodyIdx],
@@ -342,6 +343,7 @@ var _values = _.values;
 var _pushUpcoming = new cronJob({
   cronTime: '0 0-59/1 8-23/1 * * 1-5',
   onTick: _ => {
+    console.time('cron job push upcoming');
     let _nowTime = momentTimezone(new Date()).tz('Asia/Singapore');
     if (_nowTime.format('HH:mm') > '23:30') {
       console.log(`\nDo nothing at ${_nowTime.format('HH:mm')}!`);
@@ -379,21 +381,33 @@ var _pushUpcoming = new cronJob({
         let _sid = _values(_allUsers[i].sid);
         let _sidLen = _sid.length;
         let _reservations = _allUsers[i].reservations;
-        let _nowFifteen = _nowTime.format('mm');
+        let _nowFifteen = _nowTime.format('HH:mm');
+        let _nowDate = _nowTime.format('YYYY-MM-DD');
+        let _nowDate2 = _nowTime.format('YYYY-M-DD');
 
         // Traverse every reservations of _allUsers[i].
         _forIn(_reservations, (r, idx) => {
+          // Check only today's reservations and fromTime must be >= now...
+          let _isTodaysReservation = r.date === _nowDate || r.date === _nowDate2;
+          let _isFromTimeLarger = r.fromTime >= _nowFifteen;
+          console.log(r.date, _nowDate, _nowDate2, ' | ', _nowFifteen, r.fromTime);
+          console.log('_isTodaysReservation:', _isTodaysReservation, _isFromTimeLarger);
+          if (!(_isTodaysReservation && _isFromTimeLarger)) {
+            return;
+          }
+
           // When fromTime is in between now and the next 15 mins...
           // By default, each reservations has min 30mins, starts from 00.
           let _fromTimeMin = parseFloat(r.fromTime.slice(-2));
-          let _nowFifteenMin = parseFloat(_nowFifteen);
+          let _nowFifteenMin = parseFloat(_nowFifteen.slice(-2));
           let _timeLeft = _fromTimeMin - _nowFifteenMin;
           // _fromTimeMin - _nowFifteenMin and if less than 0 offset it from 60.
           _timeLeft = _timeLeft < 0 ? 60 - _timeLeft : _timeLeft;
           // At this moment, only push notify at 15, 10, 5, 0 min(s).
           let _isProperTimeLeft = _timeLeft === 15 || _timeLeft === 10 ||
                                   _timeLeft === 5 || _timeLeft === 0;
-          console.log('_timeLeft:', _timeLeft);
+          console.log(r.fromTime, _fromTimeMin, _nowFifteenMin);
+          console.log('_timeLeft:', _timeLeft, _isProperTimeLeft);
           // If fromTime is in between and has predefined time left...
           if (_isProperTimeLeft) {
             // Push to queue which will be going to be used by incoming
@@ -419,18 +433,18 @@ var _pushUpcoming = new cronJob({
       return _registrationTokens;
     }).then((_registrationTokens) => {
       // Do nothing if _registrationTokens is empty...
-      console.log('_registrationTokens:', _registrationTokens);
+      console.log('_registrationTokens:', _isEmpty(_registrationTokens));
       if (!_isEmpty(_registrationTokens)) {
-        _message.addNotification({
-          title: 'you sucker',
-          body: 'haha',
-          message: 'lol'
-        });
-        _message.addData({
-          title: 'you sucker',
-          body: 'haha',
-          message: 'lol'
-        });
+        // _message.addNotification({
+        //   title: 'you sucker',
+        //   body: 'haha',
+        //   message: 'lol'
+        // });
+        // _message.addData({
+        //   title: 'you sucker',
+        //   body: 'haha',
+        //   message: 'lol'
+        // });
         // console.log('_message:', _message);
 
         _sender.send(_message, { registrationTokens: _registrationTokens }, (err, res) => {
@@ -438,8 +452,10 @@ var _pushUpcoming = new cronJob({
           else console.log('\n_sender res:', res);
         });
       }
+      console.timeEnd('cron job push upcoming');
     }).catch((error) => {
       console.error(error);
+      console.timeEnd('cron job push upcoming');
     });
   },
   onComplete: _ => {

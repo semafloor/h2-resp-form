@@ -212,7 +212,7 @@ app.get('/notification-data.json/:email', (req, res) => {
   // Since the push queue is an Object, new reminder will automatically overwrites
   // the existing one which under the same user. Only one reminder will be push-notified
   // at a time.
-  if (_.isUndefined(_pushQueue[_emailParams])) {
+  if (_.isUndefined(_pushQueue[_emailParams]) || _.isNull(_pushQueue[_emailParams])) {
     // TODO: For debugging purpose. To be removed.
     console.log(_randomTitles[_randomTitleIdx], _randomBodies[_randomBodyIdx], _randomTag);
     res.json({
@@ -234,6 +234,9 @@ app.get('/notification-data.json/:email', (req, res) => {
       'tag': _tag
     });
   }
+
+  // Clear the _pushQueue once push notified.
+  _pushQueue[_emailParams] = null;
 });
 
 // ############## Experimenting CronJob for Node ############
@@ -447,7 +450,8 @@ var _pushUpcoming = new cronJob({
         // });
         // console.log('_message:', _message);
 
-        _sender.send(_message, { registrationTokens: _registrationTokens }, (err, res) => {
+        // Try setting retry count to 5 ATM and see how things go.
+        _sender.send(_message, { registrationTokens: _registrationTokens }, 5, (err, res) => {
           if (err) console.error(err);
           else console.log('\n_sender res:', res);
         });
